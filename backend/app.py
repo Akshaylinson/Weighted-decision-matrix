@@ -97,7 +97,7 @@ def index():
 # ──────────────────────────────────────────────
 @app.route("/health")
 def health():
-    return jsonify({"status": "ok", "groq_configured": bool(GROQ_API_KEY), "model": MODEL_NAME})
+    return jsonify(ok({"groq_configured": bool(GROQ_API_KEY), "model": MODEL_NAME}))
 
 # ──────────────────────────────────────────────
 # AI — Suggest criteria, options, weights
