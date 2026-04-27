@@ -1,0 +1,17 @@
+# Environment variables
+.env
+
+# Python caches
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# Data storage (don't push user decisions)
+data/decisions/*.json
+!data/decisions/dec_example001.json  # Keep the example decision for context
+
+# IDEs and OS files
+.vscode/
+.idea/
+*.DS_Store
