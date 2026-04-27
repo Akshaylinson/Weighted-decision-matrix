@@ -34,23 +34,23 @@ app = Flask(__name__, static_folder=str(FRONT_DIR), static_url_path="")
 CORS(app)  # allow frontend on different port during dev
 
 # ──────────────────────────────────────────────
-# AI config (Grok)
+# AI config (Groq)
 # ──────────────────────────────────────────────
-GROK_API_KEY = os.getenv("GROK_API_KEY", "")
-MODEL_NAME   = os.getenv("MODEL_NAME", "grok-1")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
+MODEL_NAME   = os.getenv("MODEL_NAME", "groq-1")
 
-def call_grok_api(prompt: str, system_msg: str = "") -> str:
+def call_groq_api(prompt: str, system_msg: str = "") -> str:
     """
-    Call the Grok API.
+    Call the Groq API.
     Returns the assistant message content.
     Raises RuntimeError on failure.
     """
-    if not GROK_API_KEY:
-        logger.error("GROK_API_KEY not set.")
-        raise RuntimeError("GROK_API_KEY not set. Add it to your .env file.")
+    if not GROQ_API_KEY:
+        logger.error("GROQ_API_KEY not set.")
+        raise RuntimeError("GROQ_API_KEY not set. Add it to your .env file.")
 
     headers = {
-        "Authorization": f"Bearer {GROK_API_KEY}",
+        "Authorization": f"Bearer {GROQ_API_KEY}",
         "Content-Type": "application/json",
     }
     
@@ -65,24 +65,24 @@ def call_grok_api(prompt: str, system_msg: str = "") -> str:
         "temperature": 0.7,
     }
     
-    logger.info(f"Calling Grok API with model {MODEL_NAME}...")
+    logger.info(f"Calling Groq API with model {MODEL_NAME}...")
     try:
         resp = httpx.post(
-            "https://api.x.ai/v1/chat/completions",
+            "https://api.groq.com/openai/v1/chat/completions",
             headers=headers,
             json=payload,
             timeout=60,
         )
         resp.raise_for_status()
         data = resp.json()
-        logger.info("Grok API call successful.")
+        logger.info("Groq API call successful.")
         return data["choices"][0]["message"]["content"]
     except httpx.HTTPStatusError as e:
-        logger.error(f"Grok API HTTP error: {e.response.text}")
-        raise RuntimeError(f"Grok API HTTP error: {e.response.status_code}")
+        logger.error(f"Groq API HTTP error: {e.response.text}")
+        raise RuntimeError(f"Groq API HTTP error: {e.response.status_code}")
     except Exception as e:
-        logger.error(f"Grok API call failed: {e}")
-        raise RuntimeError(f"Grok API call failed: {e}")
+        logger.error(f"Groq API call failed: {e}")
+        raise RuntimeError(f"Groq API call failed: {e}")
 
 # ──────────────────────────────────────────────
 # Frontend
@@ -97,7 +97,7 @@ def index():
 # ──────────────────────────────────────────────
 @app.route("/health")
 def health():
-    return jsonify({"status": "ok", "grok_configured": bool(GROK_API_KEY), "model": MODEL_NAME})
+    return jsonify({"status": "ok", "groq_configured": bool(GROQ_API_KEY), "model": MODEL_NAME})
 
 # ──────────────────────────────────────────────
 # AI — Suggest criteria, options, weights
@@ -111,7 +111,8 @@ def ai_suggest():
 
     if not title:
         logger.warning("ai_suggest called without title")
-        return jsonify(*err("title is required"))
+        e_resp, code = err("title is required")
+        return jsonify(e_resp), code
 
     # Inject RAG context from past decisions
     query      = f"{title} {context}"
@@ -149,18 +150,18 @@ def ai_suggest():
     prompt = "\n".join(user_msg_parts)
 
     try:
-        raw = call_grok_api(prompt, system_msg)
+        raw = call_groq_api(prompt, system_msg)
         # Strip accidental markdown fences if the model adds them
         raw = raw.strip().lstrip("```json").lstrip("```").rstrip("```").strip()
         data = json.loads(raw)
         return jsonify(ok(data, "Suggestions generated"))
     except json.JSONDecodeError as e:
         logger.error(f"JSON parsing error in ai_suggest: {e} - Raw: {raw}")
-        return jsonify(*err(f"AI returned invalid JSON: {e}"))
+        return jsonify(err(f"AI returned invalid JSON: {e}")[0]), err(f"AI returned invalid JSON: {e}")[1]
     except RuntimeError as e:
-        return jsonify(*err(str(e), 503))
+        return jsonify(err(str(e), 503)[0]), err(str(e), 503)[1]
     except Exception as e:
-        return jsonify(*err(f"AI call failed: {str(e)}", 502))
+        return jsonify(err(f"AI call failed: {str(e)}", 502)[0]), err(f"AI call failed: {str(e)}", 502)[1]
 
 # ──────────────────────────────────────────────
 # AI — Suggest scores for an option
@@ -174,7 +175,7 @@ def ai_score():
     criteria = body.get("criteria", [])
 
     if not option or not criteria:
-        return jsonify(*err("option and criteria are required"))
+        return jsonify(err("option and criteria are required")[0]), err("option and criteria are required")[1]
 
     criteria_desc = "\n".join(
         f"- {c['name']} (id: {c['id']}): {c.get('description','')}" for c in criteria
@@ -193,17 +194,17 @@ def ai_score():
     )
 
     try:
-        raw = call_grok_api(prompt, system_msg)
+        raw = call_groq_api(prompt, system_msg)
         raw = raw.strip().lstrip("```json").lstrip("```").rstrip("```").strip()
         data = json.loads(raw)
         return jsonify(ok(data, "Scores suggested"))
     except json.JSONDecodeError as e:
         logger.error(f"JSON parsing error in ai_score: {e} - Raw: {raw}")
-        return jsonify(*err(f"AI returned invalid JSON: {e}"))
+        return jsonify(err(f"AI returned invalid JSON: {e}")[0]), err(f"AI returned invalid JSON: {e}")[1]
     except RuntimeError as e:
-        return jsonify(*err(str(e), 503))
+        return jsonify(err(str(e), 503)[0]), err(str(e), 503)[1]
     except Exception as e:
-        return jsonify(*err(f"AI call failed: {str(e)}", 502))
+        return jsonify(err(f"AI call failed: {str(e)}", 502)[0]), err(f"AI call failed: {str(e)}", 502)[1]
 
 # ──────────────────────────────────────────────
 # AI — Generate insights from final results
@@ -217,7 +218,7 @@ def ai_insights():
     criteria = body.get("criteria", [])
 
     if not results:
-        return jsonify(*err("results are required"))
+        return jsonify(err("results are required")[0]), err("results are required")[1]
 
     winner  = results[0] if results else {}
     summary = "\n".join(
@@ -241,17 +242,17 @@ def ai_insights():
     )
 
     try:
-        raw = call_grok_api(prompt, system_msg)
+        raw = call_groq_api(prompt, system_msg)
         raw = raw.strip().lstrip("```json").lstrip("```").rstrip("```").strip()
         data = json.loads(raw)
         return jsonify(ok(data, "Insights generated"))
     except json.JSONDecodeError as e:
         logger.error(f"JSON parsing error in ai_insights: {e} - Raw: {raw}")
-        return jsonify(*err(f"AI returned invalid JSON: {e}"))
+        return jsonify(err(f"AI returned invalid JSON: {e}")[0]), err(f"AI returned invalid JSON: {e}")[1]
     except RuntimeError as e:
-        return jsonify(*err(str(e), 503))
+        return jsonify(err(str(e), 503)[0]), err(str(e), 503)[1]
     except Exception as e:
-        return jsonify(*err(f"AI call failed: {str(e)}", 502))
+        return jsonify(err(f"AI call failed: {str(e)}", 502)[0]), err(f"AI call failed: {str(e)}", 502)[1]
 
 # ──────────────────────────────────────────────
 # Decision Engine — Calculate scores
@@ -264,9 +265,9 @@ def engine_calculate():
     options  = body.get("options", [])
 
     if not criteria:
-        return jsonify(*err("criteria list is required"))
+        return jsonify(err("criteria list is required")[0]), err("criteria list is required")[1]
     if not options:
-        return jsonify(*err("options list is required"))
+        return jsonify(err("options list is required")[0]), err("options list is required")[1]
 
     ranked = calculate_weighted_scores(criteria, options)
     normalized_criteria = normalize_weights(criteria)
@@ -286,7 +287,7 @@ def engine_sensitivity():
     target   = body.get("target_criterion_id", "")
 
     if not criteria or not options or not target:
-        return jsonify(*err("criteria, options, and target_criterion_id are required"))
+        return jsonify(err("criteria, options, and target_criterion_id are required")[0]), err("criteria, options, and target_criterion_id are required")[1]
 
     analysis = sensitivity_analysis(criteria, options, target)
     return jsonify(ok(analysis, "Sensitivity analysis complete"))
@@ -302,7 +303,7 @@ def get_decisions():
 def create_decision():
     body = request.get_json(force=True) or {}
     if not body.get("title"):
-        return jsonify(*err("title is required"))
+        return jsonify(err("title is required")[0]), err("title is required")[1]
 
     body.setdefault("id", new_id("dec_"))
     body.setdefault("timestamp", now_iso())
@@ -314,14 +315,14 @@ def get_decision(decision_id):
     try:
         return jsonify(ok(load_decision(decision_id)))
     except FileNotFoundError:
-        return jsonify(*err("Decision not found", 404))
+        return jsonify(err("Decision not found", 404)[0]), err("Decision not found", 404)[1]
 
 @app.route("/decisions/<decision_id>", methods=["PUT"])
 def update_decision(decision_id):
     try:
         existing = load_decision(decision_id)
     except FileNotFoundError:
-        return jsonify(*err("Decision not found", 404))
+        return jsonify(err("Decision not found", 404)[0]), err("Decision not found", 404)[1]
 
     body = request.get_json(force=True) or {}
     existing.update(body)
@@ -334,7 +335,7 @@ def update_decision(decision_id):
 def remove_decision(decision_id):
     if delete_decision(decision_id):
         return jsonify(ok(message="Decision deleted"))
-    return jsonify(*err("Decision not found", 404))
+    return jsonify(err("Decision not found", 404)[0]), err("Decision not found", 404)[1]
 
 @app.route("/decisions/search", methods=["GET"])
 def search_decisions():
