@@ -1,11 +1,6 @@
-"""
-app.py
-Flask backend for the Personal Decision Intelligence System (PDIS).
-Serves REST API endpoints — frontend is served as static files.
-"""
-
 import os
 import json
+import logging
 import httpx
 from pathlib import Path
 from flask import Flask, request, jsonify, send_from_directory
@@ -24,6 +19,12 @@ from utils import (
 )
 
 # ──────────────────────────────────────────────
+# Logging setup
+# ──────────────────────────────────────────────
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+logger = logging.getLogger(__name__)
+
+# ──────────────────────────────────────────────
 # App setup
 # ──────────────────────────────────────────────
 BASE_DIR   = Path(__file__).parent.parent
@@ -33,56 +34,70 @@ app = Flask(__name__, static_folder=str(FRONT_DIR), static_url_path="")
 CORS(app)  # allow frontend on different port during dev
 
 # ──────────────────────────────────────────────
-# AI config (OpenAI-compatible)
+# AI config (Grok)
 # ──────────────────────────────────────────────
-AI_API_KEY   = os.getenv("OPENAI_API_KEY", "")
-AI_BASE_URL  = os.getenv("AI_BASE_URL", "https://api.openai.com/v1")
-AI_MODEL     = os.getenv("AI_MODEL", "gpt-4o-mini")
+GROK_API_KEY = os.getenv("GROK_API_KEY", "")
+MODEL_NAME   = os.getenv("MODEL_NAME", "grok-1")
 
-
-def call_ai(messages: list, temperature: float = 0.7) -> str:
+def call_grok_api(prompt: str, system_msg: str = "") -> str:
     """
-    Call the OpenAI-compatible chat completion API.
+    Call the Grok API.
     Returns the assistant message content.
     Raises RuntimeError on failure.
     """
-    if not AI_API_KEY:
-        raise RuntimeError("AI_API_KEY not set. Add it to your .env file.")
+    if not GROK_API_KEY:
+        logger.error("GROK_API_KEY not set.")
+        raise RuntimeError("GROK_API_KEY not set. Add it to your .env file.")
 
     headers = {
-        "Authorization": f"Bearer {AI_API_KEY}",
+        "Authorization": f"Bearer {GROK_API_KEY}",
         "Content-Type": "application/json",
     }
-    payload = {
-        "model": AI_MODEL,
-        "messages": messages,
-        "temperature": temperature,
-    }
-    resp = httpx.post(
-        f"{AI_BASE_URL}/chat/completions",
-        headers=headers,
-        json=payload,
-        timeout=60,
-    )
-    resp.raise_for_status()
-    return resp.json()["choices"][0]["message"]["content"]
+    
+    messages = []
+    if system_msg:
+        messages.append({"role": "system", "content": system_msg})
+    messages.append({"role": "user", "content": prompt})
 
+    payload = {
+        "model": MODEL_NAME,
+        "messages": messages,
+        "temperature": 0.7,
+    }
+    
+    logger.info(f"Calling Grok API with model {MODEL_NAME}...")
+    try:
+        resp = httpx.post(
+            "https://api.x.ai/v1/chat/completions",
+            headers=headers,
+            json=payload,
+            timeout=60,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        logger.info("Grok API call successful.")
+        return data["choices"][0]["message"]["content"]
+    except httpx.HTTPStatusError as e:
+        logger.error(f"Grok API HTTP error: {e.response.text}")
+        raise RuntimeError(f"Grok API HTTP error: {e.response.status_code}")
+    except Exception as e:
+        logger.error(f"Grok API call failed: {e}")
+        raise RuntimeError(f"Grok API call failed: {e}")
 
 # ──────────────────────────────────────────────
 # Frontend
 # ──────────────────────────────────────────────
 @app.route("/")
 def index():
+    logger.info("Serving index.html")
     return send_from_directory(str(FRONT_DIR), "index.html")
-
 
 # ──────────────────────────────────────────────
 # Health check
 # ──────────────────────────────────────────────
 @app.route("/health")
 def health():
-    return jsonify(ok({"ai_configured": bool(AI_API_KEY), "model": AI_MODEL}))
-
+    return jsonify({"status": "ok", "grok_configured": bool(GROK_API_KEY), "model": MODEL_NAME})
 
 # ──────────────────────────────────────────────
 # AI — Suggest criteria, options, weights
@@ -95,6 +110,7 @@ def ai_suggest():
     constraints = body.get("constraints", "").strip()
 
     if not title:
+        logger.warning("ai_suggest called without title")
         return jsonify(*err("title is required"))
 
     # Inject RAG context from past decisions
@@ -129,23 +145,22 @@ def ai_suggest():
         user_msg_parts.append(f"Context/Description: {context}")
     if constraints:
         user_msg_parts.append(f"Constraints: {constraints}")
+        
+    prompt = "\n".join(user_msg_parts)
 
     try:
-        raw = call_ai([
-            {"role": "system", "content": system_msg},
-            {"role": "user",   "content": "\n".join(user_msg_parts)},
-        ])
+        raw = call_grok_api(prompt, system_msg)
         # Strip accidental markdown fences if the model adds them
         raw = raw.strip().lstrip("```json").lstrip("```").rstrip("```").strip()
         data = json.loads(raw)
         return jsonify(ok(data, "Suggestions generated"))
     except json.JSONDecodeError as e:
+        logger.error(f"JSON parsing error in ai_suggest: {e} - Raw: {raw}")
         return jsonify(*err(f"AI returned invalid JSON: {e}"))
     except RuntimeError as e:
         return jsonify(*err(str(e), 503))
     except Exception as e:
         return jsonify(*err(f"AI call failed: {str(e)}", 502))
-
 
 # ──────────────────────────────────────────────
 # AI — Suggest scores for an option
@@ -171,27 +186,24 @@ def ai_score():
         "Respond ONLY with valid JSON (no markdown). "
         'Schema: {"scores": {"<criterion_id>": <1-5 integer>, ...}, "rationale": "string"}'
     )
-    user_msg = (
+    prompt = (
         f"Decision: {title}\nContext: {context}\n\n"
         f"Option to score: {option.get('name')} — {option.get('description','')}\n\n"
         f"Criteria:\n{criteria_desc}"
     )
 
     try:
-        raw  = call_ai([
-            {"role": "system", "content": system_msg},
-            {"role": "user",   "content": user_msg},
-        ])
-        raw  = raw.strip().lstrip("```json").lstrip("```").rstrip("```").strip()
+        raw = call_grok_api(prompt, system_msg)
+        raw = raw.strip().lstrip("```json").lstrip("```").rstrip("```").strip()
         data = json.loads(raw)
         return jsonify(ok(data, "Scores suggested"))
     except json.JSONDecodeError as e:
+        logger.error(f"JSON parsing error in ai_score: {e} - Raw: {raw}")
         return jsonify(*err(f"AI returned invalid JSON: {e}"))
     except RuntimeError as e:
         return jsonify(*err(str(e), 503))
     except Exception as e:
         return jsonify(*err(f"AI call failed: {str(e)}", 502))
-
 
 # ──────────────────────────────────────────────
 # AI — Generate insights from final results
@@ -221,7 +233,7 @@ def ai_insights():
         '{"explanation": "string", "pros": ["string",...], "cons": ["string",...], '
         '"risks": ["string",...], "recommendation": "string"}'
     )
-    user_msg = (
+    prompt = (
         f"Decision: {title}\nContext: {context}\n\n"
         f"Ranking:\n{summary}\n\n"
         f"Top option: {winner.get('name')} with score {winner.get('total_score')}/100\n"
@@ -229,25 +241,23 @@ def ai_insights():
     )
 
     try:
-        raw  = call_ai([
-            {"role": "system", "content": system_msg},
-            {"role": "user",   "content": user_msg},
-        ])
-        raw  = raw.strip().lstrip("```json").lstrip("```").rstrip("```").strip()
+        raw = call_grok_api(prompt, system_msg)
+        raw = raw.strip().lstrip("```json").lstrip("```").rstrip("```").strip()
         data = json.loads(raw)
         return jsonify(ok(data, "Insights generated"))
     except json.JSONDecodeError as e:
+        logger.error(f"JSON parsing error in ai_insights: {e} - Raw: {raw}")
         return jsonify(*err(f"AI returned invalid JSON: {e}"))
     except RuntimeError as e:
         return jsonify(*err(str(e), 503))
     except Exception as e:
         return jsonify(*err(f"AI call failed: {str(e)}", 502))
 
-
 # ──────────────────────────────────────────────
 # Decision Engine — Calculate scores
 # ──────────────────────────────────────────────
 @app.route("/engine/calculate", methods=["POST"])
+@app.route("/calculate", methods=["POST"])  # Added alias for calculate as requested
 def engine_calculate():
     body    = request.get_json(force=True) or {}
     criteria = body.get("criteria", [])
@@ -265,7 +275,6 @@ def engine_calculate():
         "normalized_criteria": normalized_criteria,
     }, "Calculation complete"))
 
-
 # ──────────────────────────────────────────────
 # Decision Engine — Sensitivity analysis
 # ──────────────────────────────────────────────
@@ -282,14 +291,12 @@ def engine_sensitivity():
     analysis = sensitivity_analysis(criteria, options, target)
     return jsonify(ok(analysis, "Sensitivity analysis complete"))
 
-
 # ──────────────────────────────────────────────
 # Decisions CRUD
 # ──────────────────────────────────────────────
 @app.route("/decisions", methods=["GET"])
 def get_decisions():
     return jsonify(ok(list_decisions()))
-
 
 @app.route("/decisions", methods=["POST"])
 def create_decision():
@@ -302,14 +309,12 @@ def create_decision():
     path = save_decision(body)
     return jsonify(ok({"id": body["id"], "path": path}, "Decision saved")), 201
 
-
 @app.route("/decisions/<decision_id>", methods=["GET"])
 def get_decision(decision_id):
     try:
         return jsonify(ok(load_decision(decision_id)))
     except FileNotFoundError:
         return jsonify(*err("Decision not found", 404))
-
 
 @app.route("/decisions/<decision_id>", methods=["PUT"])
 def update_decision(decision_id):
@@ -325,13 +330,11 @@ def update_decision(decision_id):
     save_decision(existing)
     return jsonify(ok({"id": decision_id}, "Decision updated"))
 
-
 @app.route("/decisions/<decision_id>", methods=["DELETE"])
 def remove_decision(decision_id):
     if delete_decision(decision_id):
         return jsonify(ok(message="Decision deleted"))
     return jsonify(*err("Decision not found", 404))
-
 
 @app.route("/decisions/search", methods=["GET"])
 def search_decisions():
@@ -341,11 +344,10 @@ def search_decisions():
     similar = find_similar_decisions(q, top_k=10)
     return jsonify(ok(similar))
 
-
 # ──────────────────────────────────────────────
 # Entry point
 # ──────────────────────────────────────────────
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 5000))
-    print(f"[PDIS] Backend running at http://localhost:{port}")
-    app.run(debug=True, port=port)
+    logger.info(f"[PDIS] Backend running at http://0.0.0.0:{port}")
+    app.run(host="0.0.0.0", port=port, debug=False)
