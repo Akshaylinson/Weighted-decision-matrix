@@ -1,0 +1,25 @@
+{
+  "name": "weighted-desicion-matrix",
+  "version": "1.0.0",
+  "description": "A full-stack, AI-powered web application that helps you make structured, intelligent decisions using a **Weighted Decision Matrix**. PDIS combines deterministic mathematical scoring with generative AI (Groq) to provide criteria suggestions, option discovery, and actionable insights.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build-css": "tailwindcss -i tailwind.input.css -o frontend/tailwind.css --minify"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Akshaylinson/Weighted-decision-matrix.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/Akshaylinson/Weighted-decision-matrix/issues"
+  },
+  "homepage": "https://github.com/Akshaylinson/Weighted-decision-matrix#readme",
+  "devDependencies": {
+    "tailwindcss": "^3.4.19"
+  }
+}

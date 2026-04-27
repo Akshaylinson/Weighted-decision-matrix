@@ -7,8 +7,9 @@ from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 from dotenv import load_dotenv
 
-# Load .env from project root
+# Load .env from project root, fallback to cwd
 load_dotenv(Path(__file__).parent.parent / ".env")
+load_dotenv()  # also check cwd as fallback
 
 from decision_engine import calculate_weighted_scores, normalize_weights, sensitivity_analysis
 from rag_engine import prepare_context_for_ai, find_similar_decisions, load_all_decisions
@@ -91,6 +92,10 @@ def call_groq_api(prompt: str, system_msg: str = "") -> str:
 def index():
     logger.info("Serving index.html")
     return send_from_directory(str(FRONT_DIR), "index.html")
+
+@app.route("/favicon.ico")
+def favicon():
+    return "", 204
 
 # ──────────────────────────────────────────────
 # Health check
