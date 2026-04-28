@@ -57,7 +57,7 @@ async function generateProfessionalReport() {
     }
 
     // Page 7: Sensitivity Analysis (if available)
-    if (sensitivityState.active && sensitivityState.scenarios.length) {
+    if (sensitivityState.active && sensitivityState.original && sensitivityState.current) {
       pdf.addPage();
       addSensitivitySummary(pdf, margin, contentWidth);
     }
@@ -310,7 +310,11 @@ function addOptionsScores(pdf, margin, contentWidth) {
     
     // Option name
     pdf.setFont('helvetica', result.rank === 1 ? 'bold' : 'normal');
-    pdf.setTextColor(result.rank === 1 ? [139, 92, 246] : [40, 40, 40]);
+    if (result.rank === 1) {
+      pdf.setTextColor(139, 92, 246);
+    } else {
+      pdf.setTextColor(40, 40, 40);
+    }
     const optionText = pdf.splitTextToSize(result.name, 95);
     pdf.text(optionText[0], margin + 20, y);
     
