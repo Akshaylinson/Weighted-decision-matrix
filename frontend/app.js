@@ -1271,6 +1271,7 @@ document.addEventListener('DOMContentLoaded', () => {
   renderScoringTable();
   renderResults();
   renderSidebarSnapshot();
+  initializeSpeechRecognition();
 
   apiFetch('/health').then((data) => {
     const pill = document.getElementById('ai-status-pill');
@@ -1285,3 +1286,164 @@ document.addEventListener('DOMContentLoaded', () => {
     toast('Cannot connect to backend. Is Flask running on port 5000?', 'error', 8000);
   });
 });
+
+/* ════════════════════════════════════════════════
+   Speech-to-Text (Web Speech API)
+   ════════════════════════════════════════════════ */
+let recognition = null;
+let isListening = false;
+let finalTranscript = '';
+let lastInterimTranscript = '';
+
+function initializeSpeechRecognition() {
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const micButton = document.getElementById('mic-button');
+  const micStatus = document.getElementById('mic-status');
+
+  if (!SpeechRecognition) {
+    if (micButton) {
+      micButton.disabled = true;
+      micButton.title = 'Speech recognition not supported in this browser';
+    }
+    console.warn('Web Speech API not supported in this browser.');
+    return;
+  }
+
+  recognition = new SpeechRecognition();
+  recognition.continuous = true;
+  recognition.interimResults = true;
+  recognition.lang = 'en-US';
+  recognition.maxAlternatives = 1;
+
+  recognition.onstart = () => {
+    isListening = true;
+    micButton.classList.add('listening');
+    micStatus.classList.add('active', 'listening');
+    micStatus.innerHTML = '<span class="mic-status-dot"></span><span>Listening...</span>';
+  };
+
+  recognition.onresult = (event) => {
+    let interimTranscript = '';
+    
+    for (let i = event.resultIndex; i < event.results.length; i++) {
+      const transcript = event.results[i][0].transcript;
+      
+      if (event.results[i].isFinal) {
+        finalTranscript += transcript + ' ';
+      } else {
+        interimTranscript += transcript;
+      }
+    }
+
+    const textarea = document.getElementById('inp-context');
+    if (textarea) {
+      textarea.value = (finalTranscript + interimTranscript).trim();
+      lastInterimTranscript = interimTranscript;
+      
+      textarea.scrollTop = textarea.scrollHeight;
+      handleDecisionFieldChange();
+    }
+  };
+
+  recognition.onerror = (event) => {
+    console.error('Speech recognition error:', event.error);
+    
+    let errorMessage = 'Speech recognition error';
+    switch (event.error) {
+      case 'not-allowed':
+      case 'permission-denied':
+        errorMessage = 'Microphone permission denied. Please allow microphone access.';
+        break;
+      case 'no-speech':
+        return;
+      case 'audio-capture':
+        errorMessage = 'No microphone found. Please connect a microphone.';
+        break;
+      case 'network':
+        errorMessage = 'Network error occurred during speech recognition.';
+        break;
+      case 'aborted':
+        return;
+      default:
+        errorMessage = `Speech recognition error: ${event.error}`;
+    }
+    
+    toast(errorMessage, 'error', 5000);
+    stopSpeechRecognition();
+  };
+
+  recognition.onend = () => {
+    if (isListening) {
+      try {
+        recognition.start();
+      } catch (e) {
+        stopSpeechRecognition();
+      }
+    }
+  };
+}
+
+function toggleSpeechRecognition() {
+  if (!recognition) {
+    toast('Speech recognition is not available in this browser.', 'warning');
+    return;
+  }
+
+  if (isListening) {
+    stopSpeechRecognition();
+  } else {
+    startSpeechRecognition();
+  }
+}
+
+function startSpeechRecognition() {
+  if (!recognition) return;
+  
+  const textarea = document.getElementById('inp-context');
+  if (textarea && textarea.value.trim()) {
+    finalTranscript = textarea.value.trim() + ' ';
+  } else {
+    finalTranscript = '';
+  }
+  
+  lastInterimTranscript = '';
+
+  try {
+    recognition.start();
+    toast('Voice input started. Speak naturally.', 'info', 2000);
+  } catch (error) {
+    console.error('Failed to start recognition:', error);
+    toast('Failed to start voice input. Please try again.', 'error');
+  }
+}
+
+function stopSpeechRecognition() {
+  if (!recognition) return;
+  
+  isListening = false;
+  const micButton = document.getElementById('mic-button');
+  const micStatus = document.getElementById('mic-status');
+  
+  try {
+    recognition.stop();
+  } catch (error) {
+    console.error('Error stopping recognition:', error);
+  }
+  
+  if (micButton) {
+    micButton.classList.remove('listening');
+  }
+  
+  if (micStatus) {
+    micStatus.classList.remove('active', 'listening');
+  }
+  
+  const textarea = document.getElementById('inp-context');
+  if (textarea && finalTranscript) {
+    textarea.value = finalTranscript.trim();
+    handleDecisionFieldChange();
+  }
+  
+  finalTranscript = '';
+  lastInterimTranscript = '';
+}

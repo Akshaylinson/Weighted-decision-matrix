@@ -1130,6 +1130,118 @@ button {
   background: white !important;
 }
 
+/* Speech-to-Text Microphone Button */
+.textarea-with-mic {
+  position: relative;
+}
+
+.mic-button {
+  position: absolute;
+  right: 14px;
+  bottom: 14px;
+  width: 44px;
+  height: 44px;
+  border-radius: 999px;
+  background: rgba(139, 92, 246, 0.12);
+  border: 1px solid rgba(139, 92, 246, 0.28);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: var(--transition);
+  z-index: 10;
+}
+
+.mic-button:hover {
+  background: rgba(139, 92, 246, 0.2);
+  border-color: rgba(139, 92, 246, 0.4);
+  transform: scale(1.05);
+}
+
+.mic-button.listening {
+  background: rgba(239, 68, 68, 0.18);
+  border-color: rgba(239, 68, 68, 0.4);
+  animation: mic-pulse 1.5s ease-in-out infinite;
+}
+
+.mic-button.listening:hover {
+  background: rgba(239, 68, 68, 0.25);
+}
+
+.mic-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.mic-icon {
+  width: 20px;
+  height: 20px;
+  color: #a78bfa;
+  transition: var(--transition);
+}
+
+.mic-button.listening .mic-icon {
+  color: #f87171;
+}
+
+.mic-button:disabled .mic-icon {
+  color: #64748b;
+}
+
+.mic-status {
+  position: absolute;
+  right: 68px;
+  bottom: 20px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: rgba(139, 92, 246, 0.14);
+  border: 1px solid rgba(139, 92, 246, 0.28);
+  color: #c4b5fd;
+  font-size: 0.82rem;
+  font-weight: 500;
+  display: none;
+  align-items: center;
+  gap: 8px;
+  animation: fade-in 200ms ease;
+  z-index: 10;
+}
+
+.mic-status.active {
+  display: flex;
+}
+
+.mic-status.listening {
+  background: rgba(239, 68, 68, 0.14);
+  border-color: rgba(239, 68, 68, 0.28);
+  color: #fca5a5;
+}
+
+.mic-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: currentColor;
+  animation: pulse-dot 1.2s ease-in-out infinite;
+}
+
+@keyframes mic-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 0 12px rgba(239, 68, 68, 0);
+  }
+}
+
+@keyframes pulse-dot {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+
 @media (max-width: 1200px) {
   .app-shell {
     grid-template-columns: 1fr;
