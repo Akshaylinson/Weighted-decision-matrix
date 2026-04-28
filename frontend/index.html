@@ -95,6 +95,7 @@
           <nav class="view-switch">
             <button class="view-tab active" data-tab="builder" onclick="switchTab('builder')">Builder</button>
             <button class="view-tab" data-tab="timeline" onclick="switchTab('timeline')">Timeline</button>
+            <button class="view-tab" data-tab="analytics" onclick="switchTab('analytics')">Analytics</button>
             <button class="view-tab" data-tab="biases" onclick="switchTab('biases')">Biases</button>
             <button class="view-tab" data-tab="history" onclick="switchTab('history')">History</button>
           </nav>
@@ -333,8 +334,8 @@
               </div>
               <div class="action-cluster">
                 <button class="button button-secondary" id="btn-insights" onclick="generateInsights()">Generate Insights</button>
-                <button class="button button-primary" id="btn-export-pdf" onclick="exportResultsAsPDF()" disabled>
-                  Export as PDF
+                <button class="button button-primary" id="btn-export-pdf" onclick="generateProfessionalReport()" disabled>
+                  📊 Generate Report
                 </button>
               </div>
             </div>
@@ -547,6 +548,23 @@
         </div>
       </section>
 
+      <section id="view-analytics" class="view">
+        <div class="card glass-card">
+          <div class="card-heading-row">
+            <div>
+              <p class="eyebrow">Decision Analytics</p>
+              <h3>Decision Intelligence Dashboard</h3>
+              <p class="workspace-subtitle" style="margin-top:10px;">
+                Understand how your decisions evolve over time, how often they succeed, and which patterns define your thinking.
+              </p>
+            </div>
+            <button class="button button-ghost" onclick="switchTab('builder')">Back to Builder</button>
+          </div>
+
+          <div id="analytics-dashboard-container"></div>
+        </div>
+      </section>
+
       <section id="view-history" class="view">
         <div class="card glass-card">
           <div class="card-heading-row">
@@ -598,7 +616,9 @@
   <script src="sensitivity.js"></script>
   <script src="confidence.js"></script>
   <script src="bias.js"></script>
+  <script src="analytics.js"></script>
   <script src="scenario.js"></script>
+  <script src="report.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

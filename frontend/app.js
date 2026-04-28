@@ -171,6 +171,10 @@ function switchTab(tabName) {
     loadHistory();
   } else if (tabName === 'timeline') {
     loadTimeline();
+  } else if (tabName === 'biases') {
+    loadBiasAnalysis();
+  } else if (tabName === 'analytics') {
+    loadAnalyticsDashboard();
   }
 }
 
