@@ -32,6 +32,16 @@ def save_decision(decision: Dict[str, Any]) -> str:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     did = decision.get("id") or new_id("dec_")
     decision["id"] = did
+    
+    # Ensure outcome structure exists
+    if "outcome" not in decision:
+        decision["outcome"] = {
+            "status": "pending",
+            "correct": None,
+            "notes": "",
+            "reviewed_at": None
+        }
+    
     fp = DATA_DIR / f"{did}.json"
     with open(fp, "w", encoding="utf-8") as f:
         json.dump(decision, f, indent=2, ensure_ascii=False)

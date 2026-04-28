@@ -9,6 +9,8 @@ A full-stack, AI-powered web application that helps you make structured, intelli
 * **AI-Assisted Brainstorming**: Uses the Groq API to automatically suggest relevant evaluation criteria, realistic options, and suitable weights based on your decision context.
 * **Deterministic Scoring Engine**: Core mathematical calculations are handled purely in Python, ensuring accurate, transparent, and reproducible weighted rankings.
 * **Smart RAG Memory System**: Automatically saves past decisions as JSON and uses them to intelligently inform the AI on future related decisions (no heavy database required).
+* **Decision Learning Timeline**: Track, review, and learn from past decisions. Mark outcomes as correct/incorrect, add reflection notes, and identify patterns in your decision-making over time.
+* **Speech-to-Text Input**: Voice-powered decision context entry using Web Speech API for natural, hands-free input.
 * **Sensitivity Analysis**: See how changes in the weight of a single criterion impact your final option rankings via interactive charts.
 * **Insights Generator**: Post-decision analysis that highlights pros, cons, and risks based on the final calculated scores.
 * **Stunning UI**: Modern, responsive, glassmorphic design built with Tailwind CSS and Vanilla JS.
@@ -107,6 +109,15 @@ python backend/app.py
 4. **Engine Phase**: The Python backend deterministically calculates the weighted sums and ranks the options.
 5. **Insight Phase**: Groq returns actionable pros/cons based on the math.
 6. **Save Phase**: The entire matrix is saved to a `.json` file to inform future suggestions.
+7. **Learning Phase**: After implementing your decision, return to the Timeline to review the outcome, mark it as correct/incorrect, and add reflection notes to improve future decisions.
+
+---
+
+## 📚 Additional Documentation
+
+* **[Decision Learning System Guide](USER_GUIDE_LEARNING.md)** - How to use the Timeline and review system
+* **[Learning System Technical Docs](LEARNING_SYSTEM.md)** - API endpoints and data structures
+* **[Implementation Summary](IMPLEMENTATION_SUMMARY.md)** - Feature overview and architecture
 
 ---
 

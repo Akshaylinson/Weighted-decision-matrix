@@ -94,6 +94,7 @@
         <div class="workspace-toolbar">
           <nav class="view-switch">
             <button class="view-tab active" data-tab="builder" onclick="switchTab('builder')">Builder</button>
+            <button class="view-tab" data-tab="timeline" onclick="switchTab('timeline')">Timeline</button>
             <button class="view-tab" data-tab="history" onclick="switchTab('history')">History</button>
           </nav>
           <div class="status-pill" id="ai-status-pill">System Ready</div>
@@ -443,6 +444,46 @@
         </section>
       </section>
 
+      <section id="view-timeline" class="view">
+        <div class="card glass-card">
+          <div class="card-heading-row">
+            <div>
+              <p class="eyebrow">Decision Learning System</p>
+              <h3>Decision Timeline & Reflection</h3>
+              <p class="workspace-subtitle" style="margin-top:10px;">
+                Review past decisions, evaluate outcomes, and learn from your decision-making patterns.
+              </p>
+            </div>
+            <button class="button button-ghost" onclick="switchTab('builder')">Back to Builder</button>
+          </div>
+
+          <div class="timeline-stats" id="timeline-stats">
+            <div class="stat-chip">
+              <span>Total Decisions</span>
+              <strong id="stat-total">0</strong>
+            </div>
+            <div class="stat-chip">
+              <span>Reviewed</span>
+              <strong id="stat-reviewed">0</strong>
+            </div>
+            <div class="stat-chip">
+              <span>Correct</span>
+              <strong id="stat-correct" style="color:var(--success)">0</strong>
+            </div>
+            <div class="stat-chip">
+              <span>Incorrect</span>
+              <strong id="stat-incorrect" style="color:var(--danger)">0</strong>
+            </div>
+            <div class="stat-chip">
+              <span>Pending</span>
+              <strong id="stat-pending" style="color:var(--warning)">0</strong>
+            </div>
+          </div>
+
+          <div id="timeline-list"></div>
+        </div>
+      </section>
+
       <section id="view-history" class="view">
         <div class="card glass-card">
           <div class="card-heading-row">
@@ -470,6 +511,23 @@
   </div>
 
   <div id="toast-container"></div>
+
+  <!-- Decision Detail Modal -->
+  <div id="decision-modal" class="modal-overlay" onclick="if(event.target===this) closeDecisionModal()">
+    <div class="modal-content">
+      <div class="modal-header">
+        <div>
+          <p class="eyebrow">Decision Review</p>
+          <h3 id="modal-title">Decision Details</h3>
+        </div>
+        <button class="button button-ghost button-icon" onclick="closeDecisionModal()" title="Close">X</button>
+      </div>
+
+      <div class="modal-body" id="modal-body">
+        <!-- Content loaded dynamically -->
+      </div>
+    </div>
+  </div>
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>

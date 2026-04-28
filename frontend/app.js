@@ -166,7 +166,12 @@ function switchTab(tabName) {
   document.querySelectorAll('.view-tab').forEach((tab) => tab.classList.remove('active'));
   document.getElementById(`view-${tabName}`)?.classList.add('active');
   document.querySelector(`.view-tab[data-tab="${tabName}"]`)?.classList.add('active');
-  if (tabName === 'history') loadHistory();
+  
+  if (tabName === 'history') {
+    loadHistory();
+  } else if (tabName === 'timeline') {
+    loadTimeline();
+  }
 }
 
 function renderSidebarSnapshot() {
@@ -1446,4 +1451,277 @@ function stopSpeechRecognition() {
   
   finalTranscript = '';
   lastInterimTranscript = '';
+}
+
+/* ════════════════════════════════════════════════
+   Decision Timeline & Learning System
+   ════════════════════════════════════════════════ */
+let currentReviewDecisionId = null;
+let currentReviewCorrect = null;
+
+async function loadTimeline() {
+  const wrap = document.getElementById('timeline-list');
+  if (!wrap) return;
+  
+  wrap.innerHTML = '<div class="table-empty"><span class="spinner"></span></div>';
+  
+  try {
+    const data = await apiFetch('/decisions/timeline');
+    renderTimeline(data);
+    updateTimelineStats(data);
+  } catch (error) {
+    wrap.innerHTML = `<div class="table-empty"><p class="empty-copy">Failed to load timeline: ${esc(error.message)}</p></div>`;
+  }
+}
+
+function updateTimelineStats(decisions) {
+  const total = decisions.length;
+  const reviewed = decisions.filter(d => d.outcome?.status === 'reviewed').length;
+  const correct = decisions.filter(d => d.outcome?.correct === true).length;
+  const incorrect = decisions.filter(d => d.outcome?.correct === false).length;
+  const pending = total - reviewed;
+  
+  document.getElementById('stat-total').textContent = String(total);
+  document.getElementById('stat-reviewed').textContent = String(reviewed);
+  document.getElementById('stat-correct').textContent = String(correct);
+  document.getElementById('stat-incorrect').textContent = String(incorrect);
+  document.getElementById('stat-pending').textContent = String(pending);
+}
+
+function renderTimeline(decisions) {
+  const wrap = document.getElementById('timeline-list');
+  if (!wrap) return;
+  
+  if (!decisions.length) {
+    wrap.innerHTML = '<div class="table-empty"><p class="empty-copy">No decisions yet. Create your first decision to start learning.</p></div>';
+    return;
+  }
+  
+  wrap.innerHTML = `<div class="timeline-list">${decisions.map(decision => {
+    const date = decision.timestamp ? new Date(decision.timestamp) : new Date();
+    const day = date.getDate();
+    const month = date.toLocaleDateString('en-US', { month: 'short' });
+    
+    const outcome = decision.outcome || { status: 'pending', correct: null };
+    let badgeClass = 'pending';
+    let badgeText = '⏳ Pending Review';
+    
+    if (outcome.status === 'reviewed') {
+      if (outcome.correct === true) {
+        badgeClass = 'correct';
+        badgeText = '✅ Correct Decision';
+      } else if (outcome.correct === false) {
+        badgeClass = 'incorrect';
+        badgeText = '❌ Incorrect Decision';
+      }
+    }
+    
+    return `
+      <article class="timeline-item" onclick="openDecisionModal('${decision.id}')">
+        <div class="timeline-date">
+          <span class="timeline-date-day">${day}</span>
+          <span class="timeline-date-month">${month}</span>
+        </div>
+        <div class="timeline-content">
+          <h4>${esc(decision.title)}</h4>
+          <div class="timeline-meta">
+            <span>${decision.criteria_count} criteria</span>
+            <span>•</span>
+            <span>${decision.options_count} options</span>
+            ${decision.final_choice ? `
+              <span>•</span>
+              <span class="timeline-choice">
+                <span>🎯</span>
+                <span>${esc(decision.final_choice)}</span>
+              </span>
+            ` : ''}
+          </div>
+        </div>
+        <div class="outcome-badge ${badgeClass}">${badgeText}</div>
+      </article>
+    `;
+  }).join('')}</div>`;
+}
+
+async function openDecisionModal(decisionId) {
+  const modal = document.getElementById('decision-modal');
+  const modalBody = document.getElementById('modal-body');
+  const modalTitle = document.getElementById('modal-title');
+  
+  currentReviewDecisionId = decisionId;
+  currentReviewCorrect = null;
+  
+  modalBody.innerHTML = '<div class="table-empty"><span class="spinner"></span></div>';
+  modal.classList.add('active');
+  
+  try {
+    const decision = await apiFetch(`/decisions/${decisionId}`);
+    modalTitle.textContent = decision.title || 'Decision Details';
+    renderDecisionModal(decision);
+  } catch (error) {
+    modalBody.innerHTML = `<div class="table-empty"><p class="empty-copy">Failed to load decision: ${esc(error.message)}</p></div>`;
+  }
+}
+
+function closeDecisionModal() {
+  const modal = document.getElementById('decision-modal');
+  modal.classList.remove('active');
+  currentReviewDecisionId = null;
+  currentReviewCorrect = null;
+  
+  if (document.getElementById('view-timeline').classList.contains('active')) {
+    loadTimeline();
+  }
+}
+
+function renderDecisionModal(decision) {
+  const modalBody = document.getElementById('modal-body');
+  const outcome = decision.outcome || { status: 'pending', correct: null, notes: '', reviewed_at: null };
+  
+  const criteriaHtml = decision.criteria?.length ? decision.criteria.map(c => `
+    <div class="criteria-item">
+      <div class="criteria-item-header">
+        <span class="criteria-item-name">${esc(c.name)}</span>
+        <span class="criteria-weight">${Number(c.weight).toFixed(1)}%</span>
+      </div>
+      ${c.description ? `<p class="criteria-meta">${esc(c.description)}</p>` : ''}
+    </div>
+  `).join('') : '<p class="empty-copy">No criteria defined.</p>';
+  
+  const optionsHtml = decision.options?.length ? decision.options.map(o => {
+    const totalScore = decision.ranked_results?.find(r => r.name === o.name)?.total_score;
+    return `
+      <div class="option-item">
+        <div class="option-item-header">
+          <span class="option-item-name">${esc(o.name)}</span>
+          ${totalScore !== undefined ? `<span class="option-score">${totalScore.toFixed(1)} pts</span>` : ''}
+        </div>
+        ${o.description ? `<p class="criteria-meta">${esc(o.description)}</p>` : ''}
+      </div>
+    `;
+  }).join('') : '<p class="empty-copy">No options defined.</p>';
+  
+  const finalChoiceHtml = decision.final_choice ? `
+    <div class="timeline-choice" style="font-size:1rem;padding:12px 18px;">
+      <span>🎯</span>
+      <span>${esc(decision.final_choice)}</span>
+    </div>
+  ` : '<p class="empty-copy">No final choice recorded.</p>';
+  
+  const reviewHtml = outcome.status === 'reviewed' ? `
+    <div class="review-existing">
+      <div class="review-existing-label">Previous Review</div>
+      <div class="outcome-badge ${outcome.correct ? 'correct' : 'incorrect'}" style="margin-bottom:12px;">
+        ${outcome.correct ? '✅ Marked as Correct' : '❌ Marked as Incorrect'}
+      </div>
+      ${outcome.notes ? `<div class="review-existing-notes">${esc(outcome.notes)}</div>` : ''}
+      <div class="review-existing-date">Reviewed on ${formatDate(outcome.reviewed_at)}</div>
+    </div>
+    <div style="margin-top:16px;">
+      <button class="button button-secondary w-full" onclick="enableReReview()">Update Review</button>
+    </div>
+  ` : `
+    <div class="review-question">Was this decision correct?</div>
+    <div class="review-buttons">
+      <button class="review-button yes" id="review-yes" onclick="selectReviewAnswer(true)">👍 Yes, it was correct</button>
+      <button class="review-button no" id="review-no" onclick="selectReviewAnswer(false)">👎 No, it was incorrect</button>
+    </div>
+    <label class="field-label">Reflection Notes</label>
+    <textarea
+      class="review-notes"
+      id="review-notes"
+      placeholder="Why was this decision correct or incorrect? What did you learn?"
+    ></textarea>
+    <div style="margin-top:16px;">
+      <button class="button button-primary w-full" id="save-review-btn" onclick="saveReview()" disabled>
+        Save Review
+      </button>
+    </div>
+  `;
+  
+  modalBody.innerHTML = `
+    <div class="modal-section">
+      <p class="eyebrow">Overview</p>
+      <h4>Decision Context</h4>
+      <p style="color:var(--muted);line-height:1.6;">${esc(decision.context || 'No context provided.')}</p>
+      <p style="margin-top:8px;font-size:0.85rem;color:var(--subtle);">Created on ${formatDate(decision.timestamp)}</p>
+    </div>
+    
+    <div class="modal-section">
+      <p class="eyebrow">Evaluation Framework</p>
+      <h4>📊 Criteria & Weights</h4>
+      <div class="criteria-grid">${criteriaHtml}</div>
+    </div>
+    
+    <div class="modal-section">
+      <p class="eyebrow">Alternatives</p>
+      <h4>🎯 Options Evaluated</h4>
+      <div class="options-grid">${optionsHtml}</div>
+    </div>
+    
+    <div class="modal-section">
+      <p class="eyebrow">Final Decision</p>
+      <h4>🏆 Selected Option</h4>
+      ${finalChoiceHtml}
+    </div>
+    
+    <div class="modal-section">
+      <p class="eyebrow">Learning & Reflection</p>
+      <h4>🧠 Evaluate This Decision</h4>
+      <div class="review-section">
+        ${reviewHtml}
+      </div>
+    </div>
+  `;
+}
+
+function selectReviewAnswer(correct) {
+  currentReviewCorrect = correct;
+  
+  const yesBtn = document.getElementById('review-yes');
+  const noBtn = document.getElementById('review-no');
+  const saveBtn = document.getElementById('save-review-btn');
+  
+  if (yesBtn && noBtn) {
+    yesBtn.classList.toggle('selected', correct === true);
+    noBtn.classList.toggle('selected', correct === false);
+  }
+  
+  if (saveBtn) {
+    saveBtn.disabled = false;
+  }
+}
+
+function enableReReview() {
+  if (!currentReviewDecisionId) return;
+  openDecisionModal(currentReviewDecisionId);
+}
+
+async function saveReview() {
+  if (!currentReviewDecisionId || currentReviewCorrect === null) {
+    toast('Please select whether the decision was correct or incorrect.', 'warning');
+    return;
+  }
+  
+  const notes = document.getElementById('review-notes')?.value.trim() || '';
+  const saveBtn = document.getElementById('save-review-btn');
+  
+  setLoading(saveBtn, true);
+  
+  try {
+    await apiFetch(`/decisions/${currentReviewDecisionId}/review`, {
+      method: 'POST',
+      body: {
+        correct: currentReviewCorrect,
+        notes: notes,
+      },
+    });
+    
+    toast('Review saved successfully! Decision outcome recorded.', 'success');
+    closeDecisionModal();
+  } catch (error) {
+    toast(`Failed to save review: ${error.message}`, 'error', 5000);
+  } finally {
+    setLoading(saveBtn, false);
+  }
 }

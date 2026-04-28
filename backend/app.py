@@ -16,7 +16,7 @@ from rag_engine import prepare_context_for_ai, find_similar_decisions, load_all_
 from utils import (
     new_id, now_iso,
     save_decision, load_decision, delete_decision, list_decisions,
-    ok, err,
+    ok, err, DATA_DIR,
 )
 
 # ──────────────────────────────────────────────
@@ -349,6 +349,81 @@ def search_decisions():
         return jsonify(ok(list_decisions()))
     similar = find_similar_decisions(q, top_k=10)
     return jsonify(ok(similar))
+
+# ──────────────────────────────────────────────
+# Decision Review / Learning System
+# ──────────────────────────────────────────────
+@app.route("/decisions/<decision_id>/review", methods=["POST"])
+def review_decision(decision_id):
+    """
+    Update decision outcome after real-world evaluation.
+    Enables learning from past decisions.
+    """
+    try:
+        decision = load_decision(decision_id)
+    except FileNotFoundError:
+        return jsonify(err("Decision not found", 404)[0]), err("Decision not found", 404)[1]
+    
+    body = request.get_json(force=True) or {}
+    correct = body.get("correct")
+    notes = body.get("notes", "").strip()
+    
+    if correct is None:
+        return jsonify(err("'correct' field is required (true/false)")[0]), err("'correct' field is required (true/false)")[1]
+    
+    # Initialize outcome if not exists
+    if "outcome" not in decision:
+        decision["outcome"] = {}
+    
+    # Update outcome
+    decision["outcome"]["status"] = "reviewed"
+    decision["outcome"]["correct"] = bool(correct)
+    decision["outcome"]["notes"] = notes
+    decision["outcome"]["reviewed_at"] = now_iso()
+    
+    save_decision(decision)
+    logger.info(f"Decision {decision_id} reviewed: correct={correct}")
+    
+    return jsonify(ok({"id": decision_id, "outcome": decision["outcome"]}, "Review saved successfully"))
+
+@app.route("/decisions/timeline", methods=["GET"])
+def get_timeline():
+    """
+    Return all decisions with outcome status for timeline view.
+    Sorted by date (newest first).
+    """
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    timeline = []
+    
+    for fp in sorted(DATA_DIR.glob("*.json"), key=os.path.getmtime, reverse=True):
+        try:
+            with open(fp, "r", encoding="utf-8") as f:
+                d = json.load(f)
+            
+            # Ensure outcome structure exists
+            outcome = d.get("outcome", {})
+            if not outcome:
+                outcome = {
+                    "status": "pending",
+                    "correct": None,
+                    "notes": "",
+                    "reviewed_at": None
+                }
+            
+            timeline.append({
+                "id": d.get("id", fp.stem),
+                "title": d.get("title", "Untitled"),
+                "context": d.get("context", ""),
+                "final_choice": d.get("final_choice", ""),
+                "timestamp": d.get("timestamp", ""),
+                "options_count": len(d.get("options", [])),
+                "criteria_count": len(d.get("criteria", [])),
+                "outcome": outcome,
+            })
+        except (json.JSONDecodeError, IOError):
+            continue
+    
+    return jsonify(ok(timeline))
 
 # ──────────────────────────────────────────────
 # Entry point
