@@ -11,7 +11,7 @@ A full-stack, AI-powered web application that helps you make structured, intelli
 * **Smart RAG Memory System**: Automatically saves past decisions as JSON and uses them to intelligently inform the AI on future related decisions (no heavy database required).
 * **Decision Learning Timeline**: Track, review, and learn from past decisions. Mark outcomes as correct/incorrect, add reflection notes, and identify patterns in your decision-making over time.
 * **Speech-to-Text Input**: Voice-powered decision context entry using Web Speech API for natural, hands-free input.
-* **Sensitivity Analysis**: See how changes in the weight of a single criterion impact your final option rankings via interactive charts.
+* **Interactive Sensitivity Analysis**: Real-time weight adjustment with instant ranking recalculation, stability indicators, and critical criteria detection. Understand how your decision changes with different priorities.
 * **Insights Generator**: Post-decision analysis that highlights pros, cons, and risks based on the final calculated scores.
 * **Stunning UI**: Modern, responsive, glassmorphic design built with Tailwind CSS and Vanilla JS.
 
@@ -115,6 +115,7 @@ python backend/app.py
 
 ## 📚 Additional Documentation
 
+* **[Sensitivity Analysis Guide](SENSITIVITY_ANALYSIS.md)** - Interactive weight adjustment and decision stability analysis
 * **[Decision Learning System Guide](USER_GUIDE_LEARNING.md)** - How to use the Timeline and review system
 * **[Learning System Technical Docs](LEARNING_SYSTEM.md)** - API endpoints and data structures
 * **[Implementation Summary](IMPLEMENTATION_SUMMARY.md)** - Feature overview and architecture
