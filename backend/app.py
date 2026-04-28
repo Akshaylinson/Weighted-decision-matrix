@@ -13,6 +13,7 @@ load_dotenv()  # also check cwd as fallback
 
 from decision_engine import calculate_weighted_scores, normalize_weights, sensitivity_analysis
 from rag_engine import prepare_context_for_ai, find_similar_decisions, load_all_decisions
+from bias_engine import analyze_decision_biases
 from utils import (
     new_id, now_iso,
     save_decision, load_decision, delete_decision, list_decisions,
@@ -424,6 +425,23 @@ def get_timeline():
             continue
     
     return jsonify(ok(timeline))
+
+# ──────────────────────────────────────────────
+# Bias Detection System
+# ──────────────────────────────────────────────
+@app.route("/decisions/biases", methods=["GET"])
+def get_decision_biases():
+    """
+    Analyze all historical decisions to detect behavioral patterns and biases.
+    Returns bias insights, criteria analysis, and recommendations.
+    """
+    try:
+        decisions = load_all_decisions()
+        analysis = analyze_decision_biases(decisions)
+        return jsonify(ok(analysis, "Bias analysis complete"))
+    except Exception as e:
+        logger.error(f"Bias analysis failed: {e}")
+        return jsonify(err(f"Bias analysis failed: {str(e)}", 500)[0]), err(f"Bias analysis failed: {str(e)}", 500)[1]
 
 # ──────────────────────────────────────────────
 # Entry point

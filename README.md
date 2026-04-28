@@ -13,6 +13,8 @@ A full-stack, AI-powered web application that helps you make structured, intelli
 * **Speech-to-Text Input**: Voice-powered decision context entry using Web Speech API for natural, hands-free input.
 * **Interactive Sensitivity Analysis**: Real-time weight adjustment with instant ranking recalculation, stability indicators, and critical criteria detection. Understand how your decision changes with different priorities.
 * **Decision Confidence Score**: Data-driven reliability assessment that evaluates decision quality based on criteria depth, weight balance, score separation, and stability. Get High/Medium/Low confidence ratings with actionable warnings.
+* **Bias Detection System**: Analyzes historical decisions to identify consistent behavioral patterns like over-prioritizing certain criteria, neglecting long-term factors, or habitual decision structures. Provides personalized recommendations to improve decision-making.
+* **Scenario Simulation**: Explore how your decision changes under different future conditions. Create multiple scenarios with varying priorities, compare outcomes side-by-side, and identify robust choices that work across situations.
 * **Insights Generator**: Post-decision analysis that highlights pros, cons, and risks based on the final calculated scores.
 * **Stunning UI**: Modern, responsive, glassmorphic design built with Tailwind CSS and Vanilla JS.
 
@@ -116,6 +118,8 @@ python backend/app.py
 
 ## 📚 Additional Documentation
 
+* **[Scenario Simulation Guide](SCENARIO_SIMULATION.md)** - Multi-scenario comparison and strategic planning
+* **[Bias Detection Guide](BIAS_DETECTION.md)** - Historical pattern analysis and cognitive bias detection
 * **[Decision Confidence Score Guide](CONFIDENCE_SCORE.md)** - Data-driven reliability assessment system
 * **[Sensitivity Analysis Guide](SENSITIVITY_ANALYSIS.md)** - Interactive weight adjustment and decision stability analysis
 * **[Decision Learning System Guide](USER_GUIDE_LEARNING.md)** - How to use the Timeline and review system
