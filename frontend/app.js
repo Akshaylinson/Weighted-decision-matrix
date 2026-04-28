@@ -652,6 +652,7 @@ function renderResults() {
     document.getElementById('score-breakdown-wrap').innerHTML = `<div class="table-empty"><p class="empty-copy">Breakdown table will appear here after scoring.</p></div>`;
     document.getElementById('insights-wrap').innerHTML = `<div class="insights-empty"><p class="empty-copy">Generate AI insights after the results are ready.</p></div>`;
     document.getElementById('winner-callout').innerHTML = `<p class="empty-copy">No recommendation yet. Calculate scores to see the leading option.</p>`;
+    document.getElementById('confidence-score-container').innerHTML = `<div class="confidence-empty"><p class="empty-copy">Calculate results to see decision confidence analysis.</p></div>`;
     destroyCharts();
     updateStepButtons();
     return;
@@ -728,6 +729,7 @@ function renderResults() {
   }
 
   renderCharts();
+  renderConfidenceScore();
   updateStepButtons();
 }
 

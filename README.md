@@ -12,6 +12,7 @@ A full-stack, AI-powered web application that helps you make structured, intelli
 * **Decision Learning Timeline**: Track, review, and learn from past decisions. Mark outcomes as correct/incorrect, add reflection notes, and identify patterns in your decision-making over time.
 * **Speech-to-Text Input**: Voice-powered decision context entry using Web Speech API for natural, hands-free input.
 * **Interactive Sensitivity Analysis**: Real-time weight adjustment with instant ranking recalculation, stability indicators, and critical criteria detection. Understand how your decision changes with different priorities.
+* **Decision Confidence Score**: Data-driven reliability assessment that evaluates decision quality based on criteria depth, weight balance, score separation, and stability. Get High/Medium/Low confidence ratings with actionable warnings.
 * **Insights Generator**: Post-decision analysis that highlights pros, cons, and risks based on the final calculated scores.
 * **Stunning UI**: Modern, responsive, glassmorphic design built with Tailwind CSS and Vanilla JS.
 
@@ -115,6 +116,7 @@ python backend/app.py
 
 ## 📚 Additional Documentation
 
+* **[Decision Confidence Score Guide](CONFIDENCE_SCORE.md)** - Data-driven reliability assessment system
 * **[Sensitivity Analysis Guide](SENSITIVITY_ANALYSIS.md)** - Interactive weight adjustment and decision stability analysis
 * **[Decision Learning System Guide](USER_GUIDE_LEARNING.md)** - How to use the Timeline and review system
 * **[Learning System Technical Docs](LEARNING_SYSTEM.md)** - API endpoints and data structures
