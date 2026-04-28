@@ -334,6 +334,9 @@
               </div>
               <div class="action-cluster">
                 <button class="button button-secondary" id="btn-insights" onclick="generateInsights()">Generate Insights</button>
+                <button class="button button-secondary" id="btn-explain-decision" onclick="explainMyDecision()" disabled>
+                  Explain Like a Mentor
+                </button>
                 <button class="button button-primary" id="btn-export-pdf" onclick="generateProfessionalReport()" disabled>
                   📊 Generate Report
                 </button>
@@ -606,6 +609,26 @@
 
       <div class="modal-body" id="modal-body">
         <!-- Content loaded dynamically -->
+      </div>
+    </div>
+  </div>
+
+  <div id="mentor-modal" class="modal-overlay" onclick="if(event.target===this) closeMentorModal()">
+    <div class="modal-content mentor-modal-content">
+      <div class="modal-header mentor-modal-header">
+        <div>
+          <p class="eyebrow">Explain My Decision</p>
+          <h3 id="mentor-modal-title">Mentor Explanation</h3>
+          <p class="workspace-subtitle" id="mentor-modal-subtitle">Structured guidance based on your matrix, confidence, and sensitivity signals.</p>
+        </div>
+        <div class="action-cluster">
+          <button class="button button-ghost" id="btn-copy-mentor" onclick="copyMentorExplanation()" disabled>Copy</button>
+          <button class="button button-ghost" onclick="closeMentorModal()">Close</button>
+        </div>
+      </div>
+
+      <div class="modal-body" id="mentor-modal-body">
+        <div class="table-empty"><p class="empty-copy">Calculate results and generate an explanation to begin.</p></div>
       </div>
     </div>
   </div>

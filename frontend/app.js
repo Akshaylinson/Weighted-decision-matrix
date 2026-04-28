@@ -18,6 +18,8 @@ const state = {
   },
   results: null,
   insights: null,
+  mentorExplanation: null,
+  mentorExplanationCacheKey: null,
   step: 1,
   history: [],
   sensitivity: null,
@@ -198,10 +200,12 @@ function updateStepButtons() {
   const step1Next = document.getElementById('step1-next');
   const step2Next = document.getElementById('step2-next');
   const exportBtn = document.getElementById('btn-export-pdf');
+  const explainBtn = document.getElementById('btn-explain-decision');
 
   if (step1Next) step1Next.disabled = !validateStep1(false);
   if (step2Next) step2Next.disabled = state.decision.criteria.length === 0;
   if (exportBtn) exportBtn.disabled = !state.results;
+  if (explainBtn) explainBtn.disabled = !state.results;
 
   updateCriteriaSummary();
   updateScoreSummary();
@@ -225,10 +229,12 @@ function updateCriteriaSummary() {
 }
 
 function invalidateResults() {
-  if (!state.results && !state.insights && !state.sensitivity) return;
+  if (!state.results && !state.insights && !state.sensitivity && !state.mentorExplanation) return;
   state.results = null;
   state.insights = null;
   state.sensitivity = null;
+  state.mentorExplanation = null;
+  state.mentorExplanationCacheKey = null;
   document.getElementById('winner-callout').classList.remove('active');
   document.getElementById('sensitivity-wrap').innerHTML = '';
   destroyCharts();
@@ -657,6 +663,7 @@ function renderResults() {
     document.getElementById('insights-wrap').innerHTML = `<div class="insights-empty"><p class="empty-copy">Generate AI insights after the results are ready.</p></div>`;
     document.getElementById('winner-callout').innerHTML = `<p class="empty-copy">No recommendation yet. Calculate scores to see the leading option.</p>`;
     document.getElementById('confidence-score-container').innerHTML = `<div class="confidence-empty"><p class="empty-copy">Calculate results to see decision confidence analysis.</p></div>`;
+    closeMentorModal();
     destroyCharts();
     updateStepButtons();
     return;
@@ -927,6 +934,285 @@ async function generateInsights() {
   }
 }
 
+function buildMentorExplanationCacheKey() {
+  const confidence = calculateConfidenceScore();
+  return JSON.stringify({
+    title: state.decision.title,
+    context: state.decision.context,
+    constraints: state.decision.constraints,
+    criteria: state.decision.criteria.map((criterion) => ({
+      id: criterion.id,
+      name: criterion.name,
+      weight: Number(criterion.weight || 0),
+      description: criterion.description || '',
+    })),
+    options: state.decision.options.map((option) => ({
+      id: option.id,
+      name: option.name,
+      description: option.description || '',
+      scores: option.scores || {},
+    })),
+    results: state.results,
+    confidence: confidence ? {
+      level: confidence.level,
+      score: Number((confidence.score || 0).toFixed(3)),
+      warnings: confidence.warnings?.map((warning) => warning.message) || [],
+    } : null,
+    sensitivity: {
+      engine: state.sensitivity || null,
+      interactive: sensitivityState?.current?.results || null,
+    },
+  });
+}
+
+function summarizeSensitivityForMentor() {
+  if (sensitivityState?.active && sensitivityState.original && sensitivityState.current) {
+    const originalResults = sensitivityState.original.results || [];
+    const currentResults = sensitivityState.current.results || [];
+    const rankChanges = currentResults.reduce((count, currentItem) => {
+      const originalItem = originalResults.find((item) => item.id === currentItem.id);
+      return count + (originalItem && originalItem.rank !== currentItem.rank ? 1 : 0);
+    }, 0);
+    const topOptionStable = Boolean(originalResults[0] && currentResults[0] && originalResults[0].id === currentResults[0].id);
+    return {
+      source: 'interactive',
+      stability_label: topOptionStable && rankChanges === 0 ? 'Stable' : topOptionStable ? 'Moderately Stable' : 'Fragile',
+      top_option_stable: topOptionStable,
+      rank_changes: rankChanges,
+      summary: topOptionStable
+        ? 'Interactive sensitivity testing kept the top recommendation intact.'
+        : 'Interactive sensitivity testing changed the top recommendation.',
+    };
+  }
+
+  if (state.sensitivity?.length) {
+    const baseline = state.results || [];
+    const changedTop = state.sensitivity.some((point) => {
+      const currentTop = point.rankings?.[0];
+      return baseline[0] && currentTop && currentTop.name !== baseline[0].name;
+    });
+    const rankChanges = state.sensitivity.reduce((count, point) => {
+      const baselineRanks = new Map(baseline.map((item) => [item.name, item.rank]));
+      const pointChanges = (point.rankings || []).filter((item) => baselineRanks.get(item.name) !== item.rank).length;
+      return Math.max(count, pointChanges);
+    }, 0);
+    return {
+      source: 'engine',
+      stability_label: changedTop ? 'Fragile' : rankChanges > 0 ? 'Moderately Stable' : 'Stable',
+      top_option_stable: !changedTop,
+      rank_changes: rankChanges,
+      summary: changedTop
+        ? 'Sensitivity analysis found at least one weight shift that changes the winning option.'
+        : 'Sensitivity analysis kept the winning option stable across tested weight shifts.',
+    };
+  }
+
+  return {
+    source: 'default',
+    stability_label: 'Not Tested',
+    top_option_stable: null,
+    rank_changes: null,
+    summary: 'Sensitivity analysis has not been run yet, so stability is inferred from the current score separation.',
+  };
+}
+
+async function collectBiasInsightsForMentor() {
+  const insights = [];
+  const confidence = calculateConfidenceScore();
+
+  if (confidence?.warnings?.length) {
+    confidence.warnings.forEach((warning) => {
+      insights.push(`${warning.title}: ${warning.message}`);
+    });
+  }
+
+  try {
+    const biasData = await apiFetch('/decisions/biases');
+    (biasData.biases || []).slice(0, 3).forEach((bias) => {
+      insights.push(`${bias.title}: ${bias.description}`);
+    });
+    (biasData.recommendations || []).slice(0, 2).forEach((recommendation) => {
+      insights.push(recommendation);
+    });
+  } catch (error) {
+    // Historical bias context is helpful but optional.
+  }
+
+  return insights;
+}
+
+async function buildMentorPayload() {
+  const confidence = calculateConfidenceScore();
+  const sensitivity = summarizeSensitivityForMentor();
+  const biasInsights = await collectBiasInsightsForMentor();
+
+  return {
+    decision_title: state.decision.title,
+    decision_description: state.decision.context,
+    constraints: state.decision.constraints,
+    criteria: state.decision.criteria.map((criterion) => ({
+      id: criterion.id,
+      name: criterion.name,
+      weight: Number(criterion.weight || 0),
+      description: criterion.description || '',
+    })),
+    weights: state.decision.criteria.map((criterion) => Number(criterion.weight || 0)),
+    options: state.decision.options.map((option) => ({
+      id: option.id,
+      name: option.name,
+      description: option.description || '',
+      scores: option.scores || {},
+    })),
+    scores: state.decision.options.map((option) => ({
+      option_id: option.id,
+      option_name: option.name,
+      scores: option.scores || {},
+    })),
+    final_ranking: state.results || [],
+    confidence: confidence ? {
+      level: confidence.level,
+      percentage: `${(confidence.score * 100).toFixed(0)}%`,
+      breakdown: confidence.breakdown,
+      warnings: confidence.warnings?.map((warning) => warning.message) || [],
+    } : null,
+    sensitivity,
+    bias_insights: biasInsights,
+  };
+}
+
+function openMentorModal() {
+  document.getElementById('mentor-modal')?.classList.add('active');
+}
+
+function closeMentorModal() {
+  document.getElementById('mentor-modal')?.classList.remove('active');
+}
+
+function renderMentorExplanation(explanation) {
+  const body = document.getElementById('mentor-modal-body');
+  const title = document.getElementById('mentor-modal-title');
+  const copyBtn = document.getElementById('btn-copy-mentor');
+  if (!body) return;
+
+  title.textContent = explanation.headline || 'Mentor Explanation';
+  if (copyBtn) copyBtn.disabled = false;
+
+  const renderSection = (icon, titleText, section, listKey) => `
+    <article class="mentor-section-card">
+      <div class="mentor-section-head">
+        <div class="mentor-section-icon">${icon}</div>
+        <div>
+          <p class="eyebrow">${titleText}</p>
+          <h4>${titleText}</h4>
+        </div>
+      </div>
+      <p class="mentor-section-summary">${esc(section?.summary || '')}</p>
+      ${(section?.[listKey]?.length)
+        ? `<ul class="mentor-bullet-list">${section[listKey].map((item) => `<li>${esc(item)}</li>`).join('')}</ul>`
+        : ''}
+      ${section?.reliability_level ? `<div class="mentor-reliability-pill">${esc(section.reliability_level)}</div>` : ''}
+    </article>`;
+
+  body.innerHTML = `
+    <div class="mentor-modal-stack">
+      <div class="mentor-hero-card">
+        <p class="eyebrow">Decision Mentor</p>
+        <h4>${esc(explanation.headline || 'A structured explanation of your decision')}</h4>
+        <p>${esc(state.decision.title || 'Current decision')}</p>
+      </div>
+      <div class="mentor-grid">
+        ${renderSection('W', 'Why This Option Wins', explanation.why_this_option_wins, 'winning_factors')}
+        ${renderSection('T', 'Key Trade-offs', explanation.key_tradeoffs, 'tradeoffs')}
+        ${renderSection('R', 'What You Might Be Missing', explanation.what_you_might_be_missing, 'blind_spots')}
+        ${renderSection('Q', 'How Reliable Is This Decision', explanation.decision_reliability, 'signals')}
+        ${renderSection('A', 'Mentor Advice', explanation.mentor_advice, 'actions')}
+      </div>
+    </div>`;
+}
+
+function formatMentorExplanationForCopy(explanation) {
+  const sectionLines = (title, section, listKey) => {
+    const lines = [title, section?.summary || ''];
+    (section?.[listKey] || []).forEach((item) => lines.push(`- ${item}`));
+    if (section?.reliability_level) {
+      lines.push(`Reliability Level: ${section.reliability_level}`);
+    }
+    return lines.join('\n');
+  };
+
+  return [
+    explanation.headline || 'Mentor Explanation',
+    '',
+    sectionLines('Why This Option Wins', explanation.why_this_option_wins, 'winning_factors'),
+    '',
+    sectionLines('Key Trade-offs', explanation.key_tradeoffs, 'tradeoffs'),
+    '',
+    sectionLines('What You Might Be Missing', explanation.what_you_might_be_missing, 'blind_spots'),
+    '',
+    sectionLines('How Reliable Is This Decision', explanation.decision_reliability, 'signals'),
+    '',
+    sectionLines('Mentor Advice', explanation.mentor_advice, 'actions'),
+  ].join('\n');
+}
+
+async function copyMentorExplanation() {
+  if (!state.mentorExplanation) {
+    toast('No mentor explanation available to copy.', 'warning');
+    return;
+  }
+
+  try {
+    await navigator.clipboard.writeText(formatMentorExplanationForCopy(state.mentorExplanation));
+    toast('Mentor explanation copied.', 'success');
+  } catch (error) {
+    toast('Copy failed. Your browser blocked clipboard access.', 'error');
+  }
+}
+
+async function explainMyDecision() {
+  if (!state.results?.length) {
+    toast('Calculate results first.', 'warning');
+    return;
+  }
+
+  const cacheKey = buildMentorExplanationCacheKey();
+  if (state.mentorExplanation && state.mentorExplanationCacheKey === cacheKey) {
+    openMentorModal();
+    renderMentorExplanation(state.mentorExplanation);
+    return;
+  }
+
+  const btn = document.getElementById('btn-explain-decision');
+  const body = document.getElementById('mentor-modal-body');
+  const copyBtn = document.getElementById('btn-copy-mentor');
+
+  openMentorModal();
+  if (copyBtn) copyBtn.disabled = true;
+  body.innerHTML = `
+    <div class="mentor-loading">
+      <span class="spinner"></span>
+      <p>Analyzing your decision like a mentor...</p>
+    </div>`;
+
+  setLoading(btn, true);
+  try {
+    const payload = await buildMentorPayload();
+    const explanation = await apiFetch('/ai/explain-decision', {
+      method: 'POST',
+      body: payload,
+    });
+    state.mentorExplanation = explanation;
+    state.mentorExplanationCacheKey = cacheKey;
+    renderMentorExplanation(explanation);
+    toast('Mentor explanation generated.', 'success');
+  } catch (error) {
+    body.innerHTML = `<div class="table-empty"><p class="empty-copy">Explanation failed: ${esc(error.message)}</p></div>`;
+    toast(`Explanation failed: ${error.message}`, 'error', 5000);
+  } finally {
+    setLoading(btn, false);
+  }
+}
+
 function renderInsightList(title, className, icon, items) {
   if (!items?.length) return '';
   return `
@@ -1125,6 +1411,7 @@ async function saveDecision() {
       final_choice: state.results?.[0]?.name || '',
       ranked_results: state.results || [],
       insights: state.insights || null,
+      mentor_explanation: state.mentorExplanation || null,
     };
     const data = await apiFetch('/decisions', { method: 'POST', body: payload });
     state.decision.id = data.id;
@@ -1184,6 +1471,8 @@ async function loadDecision(id) {
     state.results = decision.ranked_results || null;
     state.insights = decision.insights || null;
     state.sensitivity = null;
+    state.mentorExplanation = decision.mentor_explanation || null;
+    state.mentorExplanationCacheKey = state.mentorExplanation ? buildMentorExplanationCacheKey() : null;
 
     document.getElementById('inp-title').value = state.decision.title;
     document.getElementById('inp-context').value = state.decision.context;
@@ -1232,6 +1521,8 @@ function resetResultsView() {
   state.results = null;
   state.insights = null;
   state.sensitivity = null;
+  state.mentorExplanation = null;
+  state.mentorExplanationCacheKey = null;
   document.getElementById('winner-callout').classList.remove('active');
   document.getElementById('sensitivity-wrap').innerHTML = '';
   destroyCharts();
@@ -1248,6 +1539,8 @@ function newDecision() {
     criteria: [],
     options: [],
   };
+  state.mentorExplanation = null;
+  state.mentorExplanationCacheKey = null;
   document.getElementById('inp-title').value = '';
   document.getElementById('inp-context').value = '';
   document.getElementById('inp-constraints').value = '';

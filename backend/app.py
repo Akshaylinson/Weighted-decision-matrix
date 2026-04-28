@@ -261,6 +261,111 @@ def ai_insights():
     except Exception as e:
         return jsonify(err(f"AI call failed: {str(e)}", 502)[0]), err(f"AI call failed: {str(e)}", 502)[1]
 
+@app.route("/ai/explain-decision", methods=["POST"])
+def ai_explain_decision():
+    body = request.get_json(force=True) or {}
+    title = body.get("decision_title", "").strip()
+    context = body.get("decision_description", "").strip()
+    criteria = body.get("criteria", [])
+    options = body.get("options", [])
+    results = body.get("final_ranking", [])
+    confidence = body.get("confidence", {}) or {}
+    sensitivity = body.get("sensitivity", {}) or {}
+    bias_insights = body.get("bias_insights", []) or []
+
+    if not title:
+        return jsonify(err("decision_title is required")[0]), err("decision_title is required")[1]
+    if not criteria or not options or not results:
+        return jsonify(err("criteria, options, and final_ranking are required")[0]), err("criteria, options, and final_ranking are required")[1]
+
+    winner = results[0]
+    ranking_summary = "\n".join(
+        f"{item.get('rank', index + 1)}. {item.get('name', 'Unknown')} - score: {float(item.get('total_score', 0)):.1f}/100"
+        for index, item in enumerate(results)
+    )
+    criteria_summary = "\n".join(
+        f"- {criterion.get('name', 'Unnamed criterion')}: weight {float(criterion.get('weight', 0)):.1f}%"
+        + (f" | notes: {criterion.get('description', '').strip()}" if criterion.get("description") else "")
+        for criterion in criteria
+    )
+
+    option_sections = []
+    for option in options:
+        score_lines = []
+        score_map = option.get("scores", {}) or {}
+        for criterion in criteria:
+            score_lines.append(
+                f"  - {criterion.get('name', 'Unnamed criterion')}: {score_map.get(criterion.get('id'), 'N/A')}/5"
+            )
+        option_sections.append(
+            f"Option: {option.get('name', 'Unnamed option')}\n"
+            f"Description: {option.get('description', '').strip() or 'No description provided'}\n"
+            "Scores:\n"
+            + "\n".join(score_lines)
+        )
+    options_summary = "\n\n".join(option_sections)
+
+    confidence_summary = (
+        f"Level: {confidence.get('level', 'Unknown')}\n"
+        f"Score: {confidence.get('percentage', 'N/A')}\n"
+        f"Warnings: {', '.join(confidence.get('warnings', [])) if confidence.get('warnings') else 'None'}"
+    )
+    sensitivity_summary = (
+        f"Stability: {sensitivity.get('stability_label', 'Unknown')}\n"
+        f"Top option stable: {sensitivity.get('top_option_stable', 'Unknown')}\n"
+        f"Rank changes observed: {sensitivity.get('rank_changes', 'Unknown')}\n"
+        f"Summary: {sensitivity.get('summary', 'No sensitivity summary available')}"
+    )
+    bias_summary = "\n".join(f"- {item}" for item in bias_insights) if bias_insights else "- No major bias insights were supplied."
+
+    system_msg = (
+        "You are an expert decision-making mentor. Analyze the given decision and provide a structured explanation. "
+        "Be honest, analytical, and helpful. Do not just summarize; interpret. "
+        "Highlight trade-offs, blind spots, and reliability, and be slightly critical when the data suggests risk. "
+        "Respond ONLY with valid JSON and no markdown.\n"
+        "JSON schema:\n"
+        "{"
+        '"headline":"string",'
+        '"why_this_option_wins":{"summary":"string","winning_factors":["string"]},'
+        '"key_tradeoffs":{"summary":"string","tradeoffs":["string"]},'
+        '"what_you_might_be_missing":{"summary":"string","blind_spots":["string"]},'
+        '"decision_reliability":{"summary":"string","reliability_level":"string","signals":["string"]},'
+        '"mentor_advice":{"summary":"string","actions":["string"]}'
+        "}"
+    )
+
+    prompt = (
+        f"Decision title: {title}\n"
+        f"Decision description: {context or 'No additional description provided.'}\n\n"
+        f"Criteria and weights:\n{criteria_summary}\n\n"
+        f"Options and scores:\n{options_summary}\n\n"
+        f"Final ranking:\n{ranking_summary}\n\n"
+        f"Winning option: {winner.get('name', 'Unknown')} with score {float(winner.get('total_score', 0)):.1f}/100\n\n"
+        f"Confidence assessment:\n{confidence_summary}\n\n"
+        f"Sensitivity assessment:\n{sensitivity_summary}\n\n"
+        f"Bias insights:\n{bias_summary}\n\n"
+        "Write concise but insightful sections for:\n"
+        "1. Why This Option Wins\n"
+        "2. Key Trade-offs\n"
+        "3. What You Might Be Missing\n"
+        "4. How Reliable Is This Decision\n"
+        "5. Mentor Advice\n"
+        "Use the actual decision data above. Avoid generic business cliches."
+    )
+
+    try:
+        raw = call_groq_api(prompt, system_msg)
+        raw = raw.strip().lstrip("```json").lstrip("```").rstrip("```").strip()
+        data = json.loads(raw)
+        return jsonify(ok(data, "Decision explanation generated"))
+    except json.JSONDecodeError as e:
+        logger.error(f"JSON parsing error in ai_explain_decision: {e} - Raw: {raw}")
+        return jsonify(err(f"AI returned invalid JSON: {e}")[0]), err(f"AI returned invalid JSON: {e}")[1]
+    except RuntimeError as e:
+        return jsonify(err(str(e), 503)[0]), err(str(e), 503)[1]
+    except Exception as e:
+        return jsonify(err(f"AI call failed: {str(e)}", 502)[0]), err(f"AI call failed: {str(e)}", 502)[1]
+
 # ──────────────────────────────────────────────
 # Decision Engine — Calculate scores
 # ──────────────────────────────────────────────
